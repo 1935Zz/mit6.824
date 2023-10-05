@@ -1,2 +1,28 @@
 # mit6.824
-mit6.824 lab2的个人实现
+mit6.824 lab2的个人实现,目前只完成了2A，2B
+虽说是个人实现，但自己做完后一直过不了测试也不知道问题在哪，最后还是去参考了下网上其他人的实现，不过根本原因还是没有弄清楚raft的具体细节
+虽然最后还是通过了所有测试，但感觉写的完全是shi山（
+[mit6.824 lab2链接](http://nil.csail.mit.edu/6.824/2021/labs/lab-raft.html)
+
+## lab2A
+2A要实现的就是一个由leader，candidate，follower三种状态构成的选举投票系统
+每一个raft实体都有一个选举超时计时器
+当计时器归0后，如果raft目前处于follower状态，转变为candidate状态，同时发起选举（向其它raft实体发送请求投票rpc）
+这里有几个小细节
+1. 每个raft实体的计时器不能设置为同一时间，需要随机化为一个范围，否则所有raft同时发起投票导致票数分均始终无法选出leader
+2. 请求投票rpc最好采取并行发送，否则很可能导致不同raft发起投票的时间间隔较小，导致选不上leader（和上一点类似）
+3. 发送rpc前要释放锁，否则可能会出现两个rpc都占据着锁，但同时都向对方发送了rpc，而rpc处理也需要锁，说白了就是互相持有锁，又互相要对方的锁，导致发生死锁
+如果获得大部分的投票，转变为leader，定时向其它raft实体发送心跳rpc重置它们的计时器避免他们发起选举投票
+
+## lab2B  
+2B要实现的是日志的复制和统一
+leader从客户端接受log，存入自己的状态中，而leader定时发送的appendentries rpc便是为了让其它raft复制它的log，保持日志的一致性
+为此，leader需要为每个其它raft实体保存1.nextindex，表示将要发送给其log的下标开始处 2，matchindex，表示匹配的log最大的下标
+如果leader最后一个log的下标>=对某个raft的nextindex，那么就表示leader可以向该raft发送请求复制log的rpc，否则发送的就是空log的心跳rpc
+appendentries rpc具体实现便是在args存入prevLogIndex表示新添加的log前一个log的下标，收到这个rpc的raft如果在该下标的log和leader的一致
+就表示这个log以及该log之前的log都保持一致，便表示leader发送过来的log可以复制，否则表示无法复制。
+可以复制之后，如果leader发送过来的的log和自己的某个log冲突，便删去该log及其之后的log，将leader发送过来的log复制到自己的log中
+而leader收到成功复制的回应后，更新nextindex和matchindex
+如果收到失败的回应，递减nextindex，继续发送appendentries rpc尝试复制直到成功
+leader要做的另一件事便是不断检查是否可以更新commitindex（表示已提交的log最大的下标），如果大多数的raft的matchindex大于某个值，那么leader的commitindex便可以更新到这个值
+
