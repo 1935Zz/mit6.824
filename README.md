@@ -44,5 +44,5 @@ leader要做的另一件事便是不断检查是否可以更新commitindex（表
 
 因为目前任职的leader具有更高的任期，所以它所接收的log任期更高，同时它的任期也会通过appendentries rpc来同步更新其余raft的任期，所以当某个raft收到任期比自己还低的appendentries，它就可以判断对方是过期的leader，不会复制过期的log
 
-而raft的状态改变，对rpc的响应都需要根据任期大小来实现
+而raft的状态改变以及rpc的响应都需要根据任期大小来实现
 
